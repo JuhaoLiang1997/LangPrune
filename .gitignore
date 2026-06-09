@@ -1,0 +1,29 @@
+# Output directories
+prune_log/
+results/
+output/
+checkpoints/
+
+# Data
+data/
+.cache/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# System
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Environment
+.env
+*.env.local

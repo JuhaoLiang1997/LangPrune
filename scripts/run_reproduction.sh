@@ -3,7 +3,7 @@
 #
 # This script runs the main experiments from the paper:
 #   Table 2:  Aya-Expanse-8B, 70% sparsity (Lang-Prune-Max vs LLM-Pruner baselines)
-#   Table 22: Qwen3-8B, 50% sparsity (Calibration-language scaling)
+#   Table 25: Qwen3-8B, 50% sparsity (Reference-language scaling, Appendix A.6.2)
 #
 # Prerequisites:
 #   1. Install dependencies: pip install -r requirements.txt
@@ -82,7 +82,7 @@ import json, os, glob
 LANGS_AYA = ["ar", "iw", "cs", "ru", "de", "en", "es", "id", "zh"]
 LANGS_QWEN = ["ar", "iw", "cs", "ru", "de", "en", "es", "id", "zh",
               "fa", "uk", "pl", "nl", "fr", "ko", "sv", "da", "it",
-              "pt", "my", "ja", "vi", "bg", "ur", "am"]
+              "pt", "ms", "ja", "vi", "bg", "ur", "am"]
 
 for run_dir in sorted(glob.glob("prune_log/*/")):
     ppl_file = os.path.join(run_dir, "ppl_results.json")
@@ -160,7 +160,7 @@ if [ "$RUN_AYA" = true ]; then
             --pruning_ratio 0.3 --multi_lang_important True --merge_methods max \
             $AYA_COMMON"
 
-    # 1g. Unpruned baseline (PP only)
+    # 1g. Unpruned baseline (PPL only)
     run_cmd "Aya: Unpruned baseline (PPL evaluation only)" \
         "python main.py --base_model '$AYA_MODEL' --save_ckpt_log_name unpruned_aya_baseline \
             --pruning_ratio 0.0 \
@@ -170,7 +170,7 @@ if [ "$RUN_AYA" = true ]; then
 fi
 
 # ============================================================================
-# Qwen3-8B experiments (Table 22)
+# Qwen3-8B experiments (Table 25)
 # ============================================================================
 if [ "$RUN_QWEN" = true ]; then
     QWEN_MODEL=${QWEN_MODEL:-/path/to/Qwen3-8B}
@@ -198,16 +198,15 @@ if [ "$RUN_QWEN" = true ]; then
     run_cmd "Qwen: Lang-Prune-Max 50% (25 langs)" \
         "python main.py --base_model '$QWEN_MODEL' --save_ckpt_log_name langprune_qwen_sp50_max_25langs \
             --pruning_ratio 0.5 --multi_lang_important True --merge_methods max \
-            --eval_languages ar iw cs ru de en es id zh fa uk pl nl fr ko sv da it pt my ja vi bg ur am \
+            --eval_languages ar iw cs ru de en es id zh fa uk pl nl fr ko sv da it pt ms ja vi bg ur am \
             $QWEN_COMMON"
 
     # 2b. LLM-Pruner baseline (mixed, 50%)
     run_cmd "Qwen: LLM-Pruner mixed 50%" \
         "python main.py --base_model '$QWEN_MODEL' --save_ckpt_log_name llmpruner_qwen_sp50_mixed \
             --pruning_ratio 0.5 --multi_lang_important False \
-            --eval_languages ar iw cs ru de en es id zh fa uk pl nl fr ko sv da it pt my ja vi bg ur am \
-            --num_examples 900 \
-            $QWEN_COMMON"
+            --eval_languages ar iw cs ru de en es id zh fa uk pl nl fr ko sv da it pt ms ja vi bg ur am \
+            $QWEN_COMMON --num_examples 900"
 fi
 
 # ============================================================================

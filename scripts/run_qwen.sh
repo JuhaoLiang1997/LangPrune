@@ -1,9 +1,9 @@
 #!/bin/bash
 # Lang-Prune: Qwen3-8B, 50% sparsity, Max aggregation
-# Reproduces Table 22 (Appendix A.6.2), row "9-calib, all-25 avg"
+# Reproduces Table 25 (Appendix A.6.2), row "9 refs"
 #
-# Expected output (mC4 validation PPL, 25 languages):
-#   Core 9 avg ≈ 17.6, OOD 16 avg ≈ 13.5, All 25 avg ≈ 15.0
+# Paper numbers (mC4 validation PPL, 25 languages):
+#   Core-9 avg = 18.34, other-16 avg ≈ 13.46, All-25 avg = 15.22
 #
 # Requirements: ~80GB GPU memory (A100/H100 recommended)
 # Data: mC4 validation splits under ./data/c4/
@@ -36,7 +36,7 @@ python main.py \
     --block_mlp_layer_start 0 --block_mlp_layer_end 36 \
     --multi_lang_important True --merge_methods max \
     --calibration_languages ar iw cs ru de en es id zh \
-    --eval_languages ar iw cs ru de en es id zh fa uk pl nl fr ko sv da it pt my ja vi bg ur am \
+    --eval_languages ar iw cs ru de en es id zh fa uk pl nl fr ko sv da it pt ms ja vi bg ur am \
     --multilingual_eval \
     --num_examples 100 \
     --test_after_train --save_model

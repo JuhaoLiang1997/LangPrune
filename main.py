@@ -150,7 +150,7 @@ def detect_model_family(model_name: str) -> str:
 
 def is_model_supported(model_name: str) -> bool:
     """
-    Check if a model is supported by DLP.
+    Check if a model is supported by Lang-Prune.
     
     Args:
         model_name: Name or path of the model

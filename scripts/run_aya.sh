@@ -2,10 +2,10 @@
 # Lang-Prune: Aya-Expanse-8B, 70% sparsity, Max aggregation
 # Reproduces Table 2 (main text), row "Lang-Prune-Max 70%"
 #
-# Expected output (mC4 validation PPL, seed=42, 100 examples):
-#   ar≈35, iw≈52, cs≈58, ru≈57, de≈62,
-#   en≈172, es≈79, id≈49, zh≈43, avg≈67
-# (Exact values vary ±10-15% by random seed. Paper reports avg=70.85.)
+# Paper numbers (Table 2, mC4 validation PPL, 100 sequences per language):
+#   ar=44.03, cs=69.71, de=64.85, en=158.33, es=72.53,
+#   id=70.08, iw=51.62, ru=60.29, zh=46.18, avg=70.85
+# Individual runs can vary by roughly ±10-15% with the random seed.
 #
 # Requirements: ~80GB GPU memory (A100/H100 recommended)
 # Data: mC4 validation splits under ./data/c4/

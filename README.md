@@ -1,58 +1,90 @@
+<div align="center">
+
 # Lang-Prune
 
-Structured pruning for multilingual LLMs that doesn't break low-resource languages.
+**Unlocking Fair and Powerful Pruning for Multilingual Large Language Models**
 
-Standard pruning with mixed-language data often works fine on English but causes catastrophic failures elsewhere (14× PPL increase on Chinese at 70% sparsity). Lang-Prune fixes this by computing importance scores **per language** and keeping anything that's critical to **any** language.
+Juhao Liang<sup>1,\*</sup>, Shiqi Zhang<sup>1,2,\*</sup>, Min Zhang<sup>3</sup>, Hao Yang<sup>3</sup>, Benyou Wang<sup>1,2,†</sup>
+
+<sup>1</sup>The Chinese University of Hong Kong, Shenzhen &nbsp; <sup>2</sup>Shenzhen Loop Area Institute &nbsp; <sup>3</sup>Huawei
+
+<sup>\*</sup>Equal contribution &nbsp; <sup>†</sup>Corresponding author
+
+[![COLM 2026](https://img.shields.io/badge/COLM-2026-750F6D)](https://colm.cc/)
+[![Paper](https://img.shields.io/badge/Paper-OpenReview-8C1B13)](https://openreview.net/forum?id=JY9Fy5tzdo)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.10](https://img.shields.io/badge/Python-3.10-3776AB)](https://www.python.org/)
+
+</div>
+
+## News
+
+- **2026-07**: Lang-Prune is accepted to **COLM 2026** (San Francisco, Oct 6–9).
+
+## TL;DR
+
+Pruning a multilingual LLM with mixed-language reference data causes **cross-lingual interference**: decisions that look good on average disproportionately damage particular languages. Lang-Prune computes structure importance **per language** on small reference sets and aggregates the scores with a **Max** operator, so any structure critical to at least one language is kept.
+
+- On `aya-expanse-8b` across 9 typologically diverse languages, Lang-Prune cuts average perplexity by **62% at 70% sparsity** relative to mixed-data pruning, and beats monolingual pruning under the same reference-data budget.
+- On `Qwen3-8B` at 50% sparsity, it reduces the average interference factor from **9.00× to 0.66×**, and the advantage grows with scale (0.6B → 14B).
+- Pruned models keep more post-training capacity: **59.6% vs 50.6%** Belebele accuracy after identical LoRA fine-tuning.
+- It is a drop-in change to [LLM-Pruner](https://github.com/horseee/LLM-Pruner): only importance estimation and aggregation are modified — no extra parameters, no retraining.
+
+<p align="center">
+  <img src="assets/overview.png" width="720" alt="Mixed-data pruning vs monolingual pruning vs Lang-Prune">
+</p>
 
 ## How it works
-
-Instead of mixing all calibration data together, Lang-Prune does three things:
 
 ```
 1. Per-language importance
    ┌─────┐  ┌─────┐  ┌─────┐  ┌─────┐
-   │ ar  │  │ en  │  │ zh  │  │ ... │    Taylor importance
-   │imp  │  │imp  │  │imp  │  │     │    computed independently
-   └──┬──┘  └──┬──┘  └──┬──┘  └──┬──┘    for each language
+   │ ar  │  │ en  │  │ zh  │  │ ... │    Taylor importance computed
+   │ imp │  │ imp │  │ imp │  │     │    independently per language,
+   └──┬──┘  └──┬──┘  └──┬──┘  └──┬──┘    then min-max normalised
       │        │        │        │
-      └────────┴───────┬┴────────┘
-                       │
-2. Max aggregation     ▼
-              torch.max(imp_ar, imp_en, imp_zh, ...)
+      └────────┴───┬────┴────────┘
+                   │
+2. Max aggregation ▼
+              max(imp_ar, imp_en, imp_zh, ...)
               "keep what any language needs"
-                       │
-3. Global pruning      ▼
-              Prune lowest-importance structures
-              until target sparsity is reached
+                   │
+3. Global pruning  ▼
+              Prune the lowest-importance coupled structures
+              until the target sparsity is reached
 ```
 
-**Why max?**  A weight that's irrelevant for English might be critical for Arabic script rendering.  Mean aggregation averages away these signals; max preserves them.
+**Why Max?** A structure that is irrelevant for English can be critical for Arabic or Chinese. Mixing the reference data (or averaging scores) dilutes these language-specific peaks; Max preserves them.
 
-The pipeline extends [LLM-Pruner](https://github.com/horseee/LLM-Pruner) — we only modified the importance estimation and aggregation stages. The dependency graph construction and pruning mechanics are unchanged.
+The dependency-graph construction and pruning mechanics are inherited unchanged from LLM-Pruner.
 
 ## Results
 
-### Aya-Expanse-8B @ 70% structured sparsity
+Per-language perplexity on the mC4 validation split after pruning `aya-expanse-8b` to **70% sparsity** (lower is better; paper Table 2):
 
-| Language | Unpruned | LLM-Pruner (mixed) | Lang-Prune (max) |
-|----------|----------|-------------------|-------------------|
-| ar | 8.1 | 62.2 | 35.0 |
-| iw | 10.5 | 63.8 | 51.6 |
-| cs | 10.7 | 115.0 | 58.1 |
-| ru | 10.5 | 81.6 | 57.1 |
-| de | 9.6 | 121.1 | 62.4 |
-| en | 12.8 | 214.8 | 171.7 |
-| es | 11.2 | 113.8 | 78.7 |
-| id | 11.1 | 118.1 | 48.5 |
-| zh | 10.3 | 133.2 | 43.5 |
-| **avg** | **10.5** | **113.7** | **67.4** |
+| Method | Ref. data | ara | ces | deu | eng | spa | ind | heb | rus | zho | **Avg** |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| Unpruned | – | 8.10 | 10.46 | 10.66 | 10.50 | 9.58 | 12.77 | 11.19 | 11.13 | 10.27 | 10.52 |
+| LLM-Pruner | monolingual | 42.71 | 81.99 | 82.82 | 236.44 | 85.19 | 77.52 | 46.87 | 57.73 | 36.47 | 83.08 |
+| LLM-Pruner | mixed | 80.99 | 164.12 | 245.65 | 378.39 | 227.26 | 173.63 | 71.97 | 127.51 | 226.88 | 188.49 |
+| **Lang-Prune-Max** | multilingual | 44.03 | 69.71 | 64.85 | 158.33 | 72.53 | 70.08 | 51.62 | 60.29 | 46.18 | **70.85** |
 
-Results from seed=42, 100 calibration examples per language. Exact values vary ±10-15% across seeds, but the ranking and relative improvements are stable. The paper reports avg=70.85 from a different seed.
+Average perplexity across sparsity levels:
 
-Key takeaways:
-- Lang-Prune achieves **41% lower PPL** than LLM-Pruner at the same sparsity
-- No language experiences catastrophic failure (worst case: en at 171.7 vs 214.8)
-- The improvement is largest on languages that mixed-data pruning hurts most (cs, id, zh)
+| Method | 30% | 50% | 70% |
+|---|---|---|---|
+| LLM-Pruner (monolingual) | 16.04 | 29.16 | 83.08 |
+| LLM-Pruner (mixed) | 17.44 | 43.90 | 188.49 |
+| **Lang-Prune-Max** | **14.90** | **25.91** | **70.85** |
+
+Scaling on the Qwen3 family at 50% sparsity (average interference factor vs. monolingual pruning, lower is better; paper Table 5):
+
+| | 0.6B | 1.7B | 4B | 8B | 14B |
+|---|---|---|---|---|---|
+| LLM-Pruner (mixed) | 1.10× | 2.22× | 1.24× | 9.00× | 8.04× |
+| **Lang-Prune** | 1.18× | 1.25× | **0.96×** | **0.66×** | **0.46×** |
+
+All runs use 100 sequences of length 128 per language (900 in total for every method). Individual reruns can differ from the paper numbers by roughly ±10–15% depending on the random seed; rankings and relative improvements are stable.
 
 ## Quick start
 
@@ -62,20 +94,19 @@ conda create -n langprune python=3.10 -y && conda activate langprune
 pip install torch==2.3.0  # CUDA 12.1 or 11.8, see INSTALL.md
 pip install -r requirements.txt
 
-# 2. Prepare mC4 data (see Data Preparation below)
+# 2. mC4 data for the 9 reference languages (downloads to ./data/c4/)
+python scripts/download_mc4.py
 
 # 3. Prune Aya-Expanse-8B at 70% sparsity
 export BASE_MODEL=/path/to/aya-expanse-8b
 bash scripts/run_aya.sh
 ```
 
-## Installation
+See [INSTALL.md](INSTALL.md) for PyTorch setup, data preparation and model download.
 
-See [INSTALL.md](INSTALL.md) for detailed instructions including PyTorch setup, data preparation, and model download.
+## Data
 
-### Data preparation
-
-Lang-Prune uses language-specific mC4 validation splits. The expected structure:
+Lang-Prune uses language-specific mC4 shards from [`allenai/c4`](https://huggingface.co/datasets/allenai/c4). `scripts/download_mc4.py` fetches exactly the files listed in `lib/datasets/languages.py`:
 
 ```
 data/c4/
@@ -88,9 +119,7 @@ data/c4/
 └── ...
 ```
 
-Language-to-file mappings are in `lib/datasets/languages.py`. 25 languages are supported (see below).
-
-The data files are standard mC4 TFRecord JSON files. You can extract them from the [mC4 dataset](https://huggingface.co/datasets/mc4) on HuggingFace, filtering by language code.
+Use `--all` to also fetch the out-of-distribution languages, or `--splits validation` if you only need evaluation shards.
 
 ## Running experiments
 
@@ -112,36 +141,38 @@ python main.py \
     --test_after_train --save_model
 ```
 
+With `--multi_lang_important True`, `--num_examples` is the number of sequences **per language**.
+
 ### LLM-Pruner baseline (mixed-data)
 
-Same as above but with `--multi_lang_important False`. This pools all calibration data together before importance estimation, which is the standard approach in prior work.
+Use `--multi_lang_important False --num_examples 900`. This pools all reference data (900 sequences, split evenly across languages) before importance estimation, which is the standard approach in prior work.
 
 ### Convenience scripts
 
 ```bash
-bash scripts/run_aya.sh                      # Lang-Prune on Aya-Expanse-8B, 70% sparsity
-bash scripts/run_aya_llmpruner_baseline.sh   # LLM-Pruner baseline
-bash scripts/run_qwen.sh                     # Lang-Prune on Qwen3-8B, 50% sparsity
-bash scripts/run_reproduction.sh all         # Full paper reproduction suite
+bash scripts/run_aya.sh                      # Lang-Prune on Aya-Expanse-8B, 70% sparsity (Table 2)
+bash scripts/run_aya_llmpruner_baseline.sh   # LLM-Pruner mixed-data baseline
+bash scripts/run_qwen.sh                     # Lang-Prune on Qwen3-8B, 50% sparsity, 25-language eval (Table 25)
+bash scripts/run_reproduction.sh all         # Main reproduction suite (add --dry-run to print commands)
 ```
 
-The scripts use `$BASE_MODEL` environment variable to locate the model. Set it or edit the scripts.
+The scripts read the model path from `$BASE_MODEL` (or `$AYA_MODEL` / `$QWEN_MODEL` for `run_reproduction.sh`).
 
 ### Key arguments
 
 | Argument | What it does |
 |----------|-------------|
-| `--multi_lang_important True` | Enable per-language importance (this is Lang-Prune) |
-| `--merge_methods max` | Max aggregation (default, recommended) |
-| `--merge_methods mean` | Average — equivalent to language-agnostic pruning |
-| `--pruning_ratio 0.7` | Target 70% channel sparsity |
+| `--multi_lang_important True` | Per-language importance estimation (Lang-Prune) |
+| `--merge_methods max` | Max aggregation — **Lang-Prune-Max**, default and recommended |
+| `--merge_methods mean` / `min` | Mean / Min aggregation (Lang-Prune-Avg / Lang-Prune-Min ablations) |
+| `--calibration_languages` | Reference languages used for importance estimation |
+| `--num_examples` | Reference sequences per language (Lang-Prune) or in total (mixed-data) |
+| `--pruning_ratio 0.7` | Target 70% sparsity |
 | `--block_wise --global_pruning` | Block-wise structured pruning with global ranking |
 | `--test_after_train` | Evaluate PPL after pruning |
-| `--save_model` | Export pruned model to HuggingFace format |
+| `--save_model` | Export the pruned model to HuggingFace format |
 
 ### Unpruned baseline
-
-To evaluate the unpruned model's PPL for comparison:
 
 ```bash
 python main.py \
@@ -154,8 +185,6 @@ python main.py \
 
 ## Post-training with LoRA
 
-After pruning, a small amount of LoRA fine-tuning can recover some of the performance loss:
-
 ```bash
 python post_training/post_training.py \
     --prune_model prune_log/my_experiment/pytorch_model.bin \
@@ -167,15 +196,15 @@ python post_training/post_training.py \
 
 ## Downstream evaluation
 
-For zero-shot tasks (Belebele, Global-MMLU), we use [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness):
+Few-shot tasks (Belebele, Global-MMLU) use [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness):
 
 ```bash
-pip install lm-eval>=0.4.0
+pip install "lm-eval>=0.4.0"
 
-# Belebele reading comprehension (8 languages)
+# Belebele reading comprehension (8 languages, 3-shot)
 bash scripts/eval_downstream.sh /path/to/hf_model my_run belebele
 
-# Global-MMLU (7 languages)
+# Global-MMLU (7 languages, 3-shot)
 bash scripts/eval_downstream.sh /path/to/hf_model my_run global_mmlu
 ```
 
@@ -189,30 +218,31 @@ python benchmark/benchmark_efficiency.py \
     --output_path results/efficiency.json
 ```
 
-Reports parameter count, MACs, inference latency, and peak GPU memory.
+Reports parameter count, MACs, inference latency and peak GPU memory. At 70% sparsity, peak inference memory of Aya-Expanse-8B drops by ~49% (15.10 GB → 7.77 GB).
 
 ## Supported models
 
-| Architecture | Models | Layers | Notes |
-|-------------|--------|--------|-------|
-| Cohere | Aya-Expanse-8B, Aya-Expanse-32B | 32 | Primary testbed |
-| Qwen3 | Qwen3-8B (36L), Qwen3-14B (40L), Qwen3-32B | varies | Requires trust_remote_code |
-| LLaMA | Llama-2-7B/13B, Llama-3-8B | 32 | Via the HF LLaMA adapter in `lib/models/hf_llama/` |
+| Architecture | Evaluated in the paper | Notes |
+|-------------|------------------------|-------|
+| Cohere | Aya-Expanse-8B | Primary testbed (32 layers) |
+| Qwen3 | Qwen3-0.6B, 1.7B, 4B, 8B, 14B | Set the layer range to the model depth (e.g. 36 for 8B, 40 for 14B) |
+| LLaMA | – | Supported via the HF LLaMA adapter in `lib/models/hf_llama/`, not evaluated in the paper |
 
-## Supported languages (25)
+## Languages
 
-**Calibration (9):** Arabic (ar), Hebrew (iw), Czech (cs), Russian (ru), German (de), English (en), Spanish (es), Indonesian (id), Chinese (zh)
+Language names and three-letter codes follow the paper; the second code is what you pass to `--calibration_languages` / `--eval_languages` (the mC4 code).
 
-**Out-of-distribution evaluation (16):** Persian (fa), Urdu (ur), Amharic (am), Bulgarian (bg), Ukrainian (uk), Polish (pl), Dutch (nl), Swedish (sv), Danish (da), French (fr), Italian (it), Portuguese (pt), Burmese (my), Japanese (ja), Korean (ko), Vietnamese (vi)
+**Reference / in-distribution (9):** Arabic (ara / `ar`), Czech (ces / `cs`), German (deu / `de`), English (eng / `en`), Spanish (spa / `es`), Indonesian (ind / `id`), Hebrew (heb / `iw`), Russian (rus / `ru`), Chinese (zho / `zh`)
 
-All 25 languages are available for both calibration and evaluation. The OOD languages are never seen during importance estimation.
+**Out-of-distribution evaluation (16):** Persian (fas / `fa`), Ukrainian (ukr / `uk`), Polish (pol / `pl`), Dutch (nld / `nl`), French (fra / `fr`), Korean (kor / `ko`), Swedish (swe / `sv`), Danish (dan / `da`), Italian (ita / `it`), Portuguese (por / `pt`), Malay (msa / `ms`), Japanese (jpn / `ja`), Vietnamese (vie / `vi`), Bulgarian (bul / `bg`), Urdu (urd / `ur`), Amharic (amh / `am`)
 
-## Hardware requirements
+Any language in `lib/datasets/languages.py` can be used for both reference data and evaluation.
 
-- ~80GB GPU memory for Aya-Expanse-8B at 70% sparsity (A100/H100 recommended)
-- ~40GB for Qwen3-8B
-- One pruning run takes roughly 1 GPU-hour on an A100
-- Multiple GPUs are supported via device_map="auto" in model loading
+## Hardware
+
+- Pruning needs ~80 GB of GPU memory (A100/H100 80 GB recommended) for both Aya-Expanse-8B and Qwen3-8B.
+- One pruning run takes under 1 GPU-hour on a single A100.
+- Multiple GPUs are supported via `device_map="auto"`.
 
 ## Repository structure
 
@@ -222,43 +252,44 @@ LangPrune/
 ├── lib/
 │   ├── torch_pruning/       # Structured pruning engine (dependency graph, importance)
 │   ├── pruner/              # Model-specific pruners (LLaMA, Qwen3 attention, RMSNorm)
-│   ├── datasets/            # mC4 multilingual data loading
-│   ├── models/              # HF LLaMA model definition (for architecture handling)
-│   ├── peft/                # LoRA implementation (from PEFT)
+│   ├── datasets/            # mC4 multilingual data loading + language table
+│   ├── models/              # HF LLaMA model definition
+│   ├── peft/                # LoRA implementation (adapted from PEFT)
 │   ├── evaluator/           # Perplexity computation
 │   ├── templates/           # Generation prompts
 │   └── utils/               # Logger, prompter utilities
-├── scripts/                 # Experiment scripts
+├── scripts/                 # Experiment scripts + mC4 download helper
 ├── post_training/           # LoRA post-training recovery
 ├── benchmark/               # Efficiency benchmarking (MACs, latency, memory)
 ├── utils/                   # Model export utilities
-├── prune_log/               # Output directory (experiment results, .gitignored)
-├── data/                    # mC4 data directory (.gitignored)
-└── .cache/                  # HuggingFace dataset cache (.gitignored)
+└── assets/                  # Figures for this README
 ```
+
+Outputs go to `prune_log/`, data to `data/`, and the HF dataset cache to `.cache/` (all git-ignored).
 
 ## Known limitations
 
-- Evaluated primarily in one-shot pruning without extensive post-training recovery. LoRA helps but doesn't fully close the gap.
-- Effectiveness depends on structured pruning paradigms — not applicable to unstructured methods (Wanda, SparseGPT).
-- The calibration data quality matters: if a language has poor mC4 coverage, importance estimates will be noisy.
-- Results vary by ±10-15% across random seeds. This is inherent to importance-estimation-based pruning.
+- Designed for structured pruning over functional units; it does not apply to unstructured methods such as Wanda or SparseGPT (see Appendix A.1).
+- Small models (0.6B–1.7B) have limited structured redundancy: there Lang-Prune does not beat monolingual pruning, and at 0.6B it is slightly worse than mixed-data pruning (Appendix A.4).
+- With very large reference-language sets (e.g. 25), Max becomes conservative and core-language PPL degrades mildly (Appendix A.6.2).
+- Importance estimates are only as good as the reference data; languages with poor mC4 coverage give noisier scores.
 
 ## Citation
 
+If you find Lang-Prune useful, please cite:
+
 ```bibtex
-@inproceedings{langprune2026,
-  title     = {Lang-Prune: Rethinking Pruning for Fairness and Efficiency in Multilingual LLMs},
-  author    = {},
-  booktitle = {Proceedings of the Conference on Language Modeling (COLM)},
-  year      = {2026}
+@inproceedings{lianglang,
+  title={Lang-Prune: Unlocking Fair and Powerful Pruning for Multilingual Large Language Models},
+  author={Liang, Juhao and Zhang, Shiqi and Zhang, Min and Yang, Hao and Wang, Benyou},
+  booktitle={Third Conference on Language Modeling}
 }
 ```
-
-## License
-
-MIT. See [LICENSE](LICENSE).
 
 ## Acknowledgments
 
 Built on [LLM-Pruner](https://github.com/horseee/LLM-Pruner) and [Torch-Pruning](https://github.com/VainF/Torch-Pruning). The PEFT module is adapted from [huggingface/peft](https://github.com/huggingface/peft).
+
+## License
+
+MIT. See [LICENSE](LICENSE).

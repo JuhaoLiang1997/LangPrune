@@ -1,4 +1,4 @@
-# Extended multilingual data configuration for DLP
+# Multilingual mC4 data configuration for Lang-Prune
 # Supports C4 dataset and additional datasets for Aya-Expanse and Qwen3 models
 
 c4_multilingual_data = {
@@ -255,6 +255,15 @@ c4_multilingual_data = {
         "is_ayaexpanse_supported": True,
         "is_qwen3_supported": False
     }, 
+    "ms": {
+        "name": "malay",
+        "language_family": "Austronesian",
+        "train": "multilingual/c4-ms.tfrecord-00000-of-00512.json.gz",
+        "validation": "multilingual/c4-ms-validation.tfrecord-00000-of-00001.json.gz",
+        "is_globalmmlu_supported": True,
+        "is_ayaexpanse_supported": False,
+        "is_qwen3_supported": True
+    },
     "my": {
         "name": "burmese",
         "language_family": "Sino-Tibetan",

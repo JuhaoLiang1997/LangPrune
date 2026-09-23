@@ -47,33 +47,28 @@ Or let the code download from HuggingFace Hub automatically by passing the model
 
 ## 5. Prepare mC4 data
 
-Lang-Prune uses language-specific mC4 splits for calibration and evaluation. You need the validation splits for the 9 core languages (ar, iw, cs, ru, de, en, es, id, zh). For OOD evaluation, you also need the 16 additional languages.
+Lang-Prune uses language-specific mC4 splits for calibration and evaluation. You need the train shards (reference data for importance estimation) and validation shards (PPL evaluation) for the 9 core languages (ar, iw, cs, ru, de, en, es, id, zh). For OOD evaluation, you also need the validation shards of the 16 additional languages.
 
-### Option A: Download pre-split files
+### Option A (recommended): download helper
 
-If you have access to pre-split mC4 files, place them under `./data/c4/` following the structure in `lib/datasets/languages.py`. Each language needs a train and validation file.
+```bash
+pip install huggingface_hub
 
-### Option B: Extract from HuggingFace
+# 9 reference languages, train + validation shards
+python scripts/download_mc4.py
 
-```python
-# Example: extract Arabic mC4 validation
-from datasets import load_dataset
+# everything in lib/datasets/languages.py (adds the OOD languages)
+python scripts/download_mc4.py --all
 
-# Load mC4 Arabic split
-ds = load_dataset("mc4", "ar", split="validation", streaming=True)
-
-# Save 1100 samples for PPL evaluation
-samples = []
-for i, example in enumerate(ds):
-    if i >= 1100:
-        break
-    samples.append({"text": example["text"]})
-
-import json
-with open("./data/c4/multilingual/c4-ar-validation.json", "w") as f:
-    for s in samples:
-        f.write(json.dumps(s, ensure_ascii=False) + "\n")
+# evaluation shards only
+python scripts/download_mc4.py --all --splits validation
 ```
+
+The script downloads the exact shards listed in `lib/datasets/languages.py` from the [`allenai/c4`](https://huggingface.co/datasets/allenai/c4) dataset repo into `./data/c4/`, keeping their relative paths. Train shards are a few hundred MB each.
+
+### Option B: use your own copy
+
+If you already have mC4 locally, place (or symlink) the files under `./data/c4/` using the relative paths in `lib/datasets/languages.py`.
 
 The expected file paths follow this pattern (defined in `lib/datasets/languages.py`):
 
@@ -112,11 +107,4 @@ print(f'Loaded {samples.shape[0]} samples, shape={samples.shape}')
 
 ## GPU memory requirements
 
-| Model | Sparsity | Peak memory |
-|-------|----------|-------------|
-| Aya-Expanse-8B | 70% | ~80 GB |
-| Aya-Expanse-8B | 50% | ~65 GB |
-| Aya-Expanse-8B | 30% | ~55 GB |
-| Qwen3-8B | 50% | ~45 GB |
-
-A100 (80GB) or H100 is recommended for 70% sparsity. If you run out of memory, try reducing `--batch_size` or `--eval_batch_size`.
+Pruning needs ~80 GB of GPU memory (A100/H100 80 GB recommended) for both Aya-Expanse-8B and Qwen3-8B. If you run out of memory, try reducing `--batch_size` or `--eval_batch_size`.
